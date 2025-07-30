@@ -1,0 +1,16 @@
+replicaCount: 1
+
+image:
+  repository: valentinlisci/flask-app-example-build
+  tag: "latest"           # Questo verrà sovrascritto al momento dell’installazione
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 5000
+
+resources: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: []
