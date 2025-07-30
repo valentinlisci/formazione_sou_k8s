@@ -1,62 +1,62 @@
 pipeline {
-    agent { label 'agent1' }
+    agent any
 
     environment {
-        DOCKER_USER = 'valentinlisci'
-        DOCKER_REPO = 'flask-app-example-build'
-        GIT_BRANCH_NAME = env.GIT_BRANCH?.replaceFirst(/^origin\//, '') ?: 'main'
-        COMMIT_SHA = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
-        GIT_TAG_NAME = sh(script: 'git describe --tags --exact-match || echo ""', returnStdout: true).trim()
+        GIT_COMMIT_HASH = ''
+        BRANCH_NAME = ''
+        dockerTag = ''
     }
 
     stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+                script {
+                    GIT_COMMIT_HASH = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
+                    BRANCH_NAME = sh(script: "git rev-parse --abbrev-ref HEAD", returnStdout: true).trim()
+                    def rawTag = sh(script: "git describe --tags --exact-match || true", returnStdout: true).trim()
+
+                    if (rawTag) {
+                        dockerTag = rawTag
+                    } else if (BRANCH_NAME == "main") {
+                        dockerTag = "latest"
+                    } else if (BRANCH_NAME == "develop") {
+                        dockerTag = "develop-${GIT_COMMIT_HASH}"
+                    } else {
+                        dockerTag = "${BRANCH_NAME}-${GIT_COMMIT_HASH}"
+                    }
+
+                    echo "Docker Tag determinato: ${dockerTag}"
+                }
+            }
+        }
+
         stage('Login a Docker Hub') {
             steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'docker-hub-credentials',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
-                    sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
+                withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin"
                 }
             }
         }
 
         stage('Build immagine Docker') {
             steps {
-                script {
-                    def tag = 'latest'
-
-                    if (GIT_TAG_NAME) {
-                        tag = GIT_TAG_NAME
-                    } else if (GIT_BRANCH_NAME == 'develop') {
-                        tag = "develop-${COMMIT_SHA}"
-                    }
-
-                    env.TAG = tag
-                    sh "docker build -t $DOCKER_USER/$DOCKER_REPO:$TAG ."
-                }
+                sh "docker build -t valentinlisci/flask-app-example-build:${dockerTag} ."
+                sh "docker tag valentinlisci/flask-app-example-build:${dockerTag} valentinlisci/flask-app-example-build:latest"
             }
         }
 
-        stage('Push su Docker Hub') {
+        stage('Push immagine Docker') {
             steps {
-                script {
-                    sh "docker push $DOCKER_USER/$DOCKER_REPO:$TAG"
-
-                    // Pusha anche latest se su main
-                    if (GIT_BRANCH_NAME == 'main') {
-                        sh "docker tag $DOCKER_USER/$DOCKER_REPO:$TAG $DOCKER_USER/$DOCKER_REPO:latest"
-                        sh "docker push $DOCKER_USER/$DOCKER_REPO:latest"
-                    }
-                }
+                sh "docker push valentinlisci/flask-app-example-build:${dockerTag}"
+                sh "docker push valentinlisci/flask-app-example-build:latest"
             }
         }
     }
 
     post {
         always {
-            sh 'docker logout || true'
+            sh 'docker logout'
         }
     }
 }
