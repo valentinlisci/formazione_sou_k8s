@@ -2,35 +2,32 @@ pipeline {
   agent any
 
   environment {
-    CHART_DIR = 'charts/flask-chart'
-    RELEASE_NAME = 'flask-app'
-    NAMESPACE = 'formazione-sou'
-    IMAGE_REPOSITORY = 'valentinlisci/flask-app-example-build'
-    IMAGE_TAG = 'v1.9'
+    TAG = "v1.9"
   }
 
   stages {
     stage('Helm Install') {
-      steps {
-        script {
-          sh '''
-            helm upgrade --install ${RELEASE_NAME} ${CHART_DIR} \
-              --namespace ${NAMESPACE} \
-              --create-namespace \
-              --set image.repository=${IMAGE_REPOSITORY} \
-              --set image.tag=${IMAGE_TAG}
-          '''
+      agent {
+        docker {
+          image 'alpine/helm:3.14.0' // versione compatibile
+          args '-v /var/run/docker.sock:/var/run/docker.sock'
         }
+      }
+      steps {
+        sh '''
+          helm upgrade --install flask-app charts/flask-chart \
+            --namespace formazione-sou \
+            --create-namespace \
+            --set image.repository=valentinlisci/flask-app-example-build \
+            --set image.tag=$TAG
+        '''
       }
     }
   }
 
   post {
-    success {
-      echo "✅ Deploy completato con successo sul namespace ${NAMESPACE}"
-    }
     failure {
-      echo "❌ Deploy fallito"
+      echo '❌ Deploy fallito'
     }
   }
 }
