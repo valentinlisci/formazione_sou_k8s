@@ -1,19 +1,18 @@
 pipeline {
-    agent { label 'agent1' }
+    agent {
+        label 'agent1'
+    }
 
     environment {
-        IMAGE_NAME = "valentinlisci/flask-app-example-build"
+        DOCKER_USER = 'valentinlisci'
+        DOCKER_REPO = 'flask-app-example-build'
         TAG = "${env.GIT_TAG_NAME ?: 'latest'}"
     }
 
     stages {
         stage('Login a Docker Hub') {
             steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'ade514a3-2a15-4b04-bd34-a909ff2b09cf',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
+                withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', passwordVariable: 'DOCKER_PASS', usernameVariable: 'DOCKER_USER')]) {
                     sh 'docker login -u $DOCKER_USER -p $DOCKER_PASS'
                 }
             }
@@ -21,13 +20,17 @@ pipeline {
 
         stage('Build immagine Docker') {
             steps {
-                sh 'docker build -t $IMAGE_NAME:$TAG .'
+                sh 'docker build -t $DOCKER_USER/$DOCKER_REPO:$TAG .'
             }
         }
 
         stage('Push su Docker Hub') {
             steps {
-                sh 'docker push $IMAGE_NAME:$TAG'
+                script {
+                    sh "docker tag $DOCKER_USER/$DOCKER_REPO:$TAG $DOCKER_USER/$DOCKER_REPO:latest"
+                    sh "docker push $DOCKER_USER/$DOCKER_REPO:$TAG"
+                    sh "docker push $DOCKER_USER/$DOCKER_REPO:latest"
+                }
             }
         }
     }
