@@ -2,26 +2,42 @@ pipeline {
   agent any
 
   environment {
-    TAG = "v1.9"
-    CHART_DIR = "charts/flask-chart"
-    RELEASE_NAME = "flask-app"
-    NAMESPACE = "formazione-sou"
+    HELM_VERSION = "v3.13.3"
+    HELM_INSTALL_DIR = "${WORKSPACE}/tools"
+    PATH = "${HELM_INSTALL_DIR}:${PATH}"
   }
 
   stages {
-    stage('Helm Install') {
+    stage('Setup Helm') {
       steps {
         sh '''
-          echo "✅ Verifica versione Helm installato"
-          helm version || { echo "❌ Helm non è installato nel nodo Jenkins"; exit 1; }
+          echo "🔍 Controllo se Helm è installato..."
 
-          echo "🚀 Eseguo helm upgrade --install"
-          helm upgrade --install $RELEASE_NAME $CHART_DIR \
-            --namespace $NAMESPACE \
-            --create-namespace \
-            --set image.repository=valentinlisci/flask-app-example-build \
-            --set image.tag=$TAG
+          if ! command -v helm >/dev/null; then
+            echo "⬇️  Scarico Helm ${HELM_VERSION}..."
+            mkdir -p ${HELM_INSTALL_DIR}
+            curl -sSL https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz | tar -xz
+            mv linux-amd64/helm ${HELM_INSTALL_DIR}/helm
+            rm -rf linux-amd64
+            echo "✅ Helm installato in ${HELM_INSTALL_DIR}/helm"
+          else
+            echo "✅ Helm già presente"
+          fi
+
+          echo "📦 Versione Helm:"
+          helm version
         '''
+      }
+    }
+
+    stage('Helm Install') {
+      steps {
+        dir('charts/flask-chart') {
+          sh '''
+            echo "🚀 Deploy con Helm..."
+            helm upgrade --install flask-release . --namespace default --create-namespace
+          '''
+        }
       }
     }
   }
