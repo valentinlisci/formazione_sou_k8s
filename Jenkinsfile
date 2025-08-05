@@ -5,6 +5,7 @@ pipeline {
     HELM_VERSION = "v3.13.3"
     HELM_INSTALL_DIR = "${WORKSPACE}/tools"
     PATH = "${HELM_INSTALL_DIR}:${PATH}"
+    KUBECONFIG = '/home/jenkins/.kube/config'
   }
 
   stages {
