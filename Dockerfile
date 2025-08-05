@@ -6,17 +6,20 @@ ENV HELM_VERSION=v3.18.4
 # Crea directory di lavoro
 WORKDIR /app
 
-# Installa dipendenze: curl, tar e Helm
+# Installa curl, tar e Helm
 RUN apt-get update && \
     apt-get install -y curl tar && \
     curl -LO https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz && \
     tar -zxvf helm-${HELM_VERSION}-linux-amd64.tar.gz && \
     mv linux-amd64/helm /usr/local/bin/helm && \
     chmod +x /usr/local/bin/helm && \
-    rm -rf linux-amd64 helm-${HELM_VERSION}-linux-amd64.tar.gz && \
-    apt-get remove -y curl tar && \
+    rm -rf linux-amd64 helm-${HELM_VERSION}-linux-amd64.tar.gz
+
+# Fai il cleanup in un secondo blocco (opzionale ma consigliato)
+RUN apt-get remove -y curl tar && \
     apt-get autoremove -y && \
-    apt-get clean
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 # Copia i file dell'app
 COPY requirements.txt .
