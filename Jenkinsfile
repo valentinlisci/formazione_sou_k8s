@@ -1,5 +1,7 @@
 pipeline {
-  agent any
+  agent {
+    label 'agent1'
+  }
 
   environment {
     HELM_VERSION = "v3.13.3"
