@@ -3,56 +3,86 @@ pipeline {
     label 'agent1'
   }
 
+  parameters {
+    string(name: 'IMAGE_TAG', defaultValue: '', description: 'Tag immagine Docker (lascia vuoto per generarlo in base a Git)')
+  }
+
   environment {
-    HELM_VERSION = "v3.13.3"
-    HELM_INSTALL_DIR = "${WORKSPACE}/tools"
-    PATH = "${HELM_INSTALL_DIR}:${PATH}"
-    KUBECONFIG = "/home/jenkins/.kube/config"  // kubeconfig corretto
+    KUBECONFIG = "/home/jenkins/.kube/config"
+    DOCKER_IMAGE = "valentinlisci/flask-app-example-build"
+    HELM_CHART_DIR = "charts/flask-chart"
+    HELM_RELEASE_NAME = "flask-release"
+    HELM_NAMESPACE = "default"
   }
 
   stages {
-    stage('Setup Helm') {
+
+    stage('Checkout') {
+      steps {
+        checkout scm
+        script {
+          def shortCommit = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
+          def branchName = sh(script: "git rev-parse --abbrev-ref HEAD", returnStdout: true).trim()
+          def tagFromGit = sh(script: "git describe --tags --exact-match || true", returnStdout: true).trim()
+
+          if (!params.IMAGE_TAG?.trim()) {
+            if (tagFromGit) {
+              env.IMAGE_TAG = tagFromGit
+            } else if (branchName == "main") {
+              env.IMAGE_TAG = "latest"
+            } else if (branchName == "develop") {
+              env.IMAGE_TAG = "develop-${shortCommit}"
+            } else {
+              env.IMAGE_TAG = "${branchName}-${shortCommit}"
+            }
+          } else {
+            env.IMAGE_TAG = params.IMAGE_TAG
+          }
+
+          echo "📛 Tag finale immagine Docker: ${env.IMAGE_TAG}"
+        }
+      }
+    }
+
+    stage('Login DockerHub') {
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+          sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin"
+        }
+      }
+    }
+
+    stage('Build Docker') {
       steps {
         sh '''
-          echo "🔍 Controllo se Helm è installato..."
-
-          if ! command -v helm >/dev/null; then
-            echo "⬇️  Scarico Helm ${HELM_VERSION}..."
-            mkdir -p ${HELM_INSTALL_DIR}
-            curl -sSL https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz | tar -xz
-            mv linux-amd64/helm ${HELM_INSTALL_DIR}/helm
-            rm -rf linux-amd64
-            echo "✅ Helm installato in ${HELM_INSTALL_DIR}/helm"
-          else
-            echo "✅ Helm già presente"
-          fi
-
-          echo "📦 Versione Helm:"
-          helm version
+          echo "🔨 Costruisco immagine Docker..."
+          docker build -t ${DOCKER_IMAGE}:${IMAGE_TAG} .
+          docker tag ${DOCKER_IMAGE}:${IMAGE_TAG} ${DOCKER_IMAGE}:latest
         '''
       }
     }
 
-    stage('Verifica Connessione Cluster') {
+    stage('Push Docker') {
       steps {
         sh '''
-          echo "🔍 Verifica connessione al cluster Kubernetes..."
-          export KUBECONFIG=/home/jenkins/.kube/config
-          kubectl cluster-info
-          kubectl get nodes
+          echo "📤 Pusho immagine Docker..."
+          docker push ${DOCKER_IMAGE}:${IMAGE_TAG}
+          docker push ${DOCKER_IMAGE}:latest
         '''
       }
     }
 
-    stage('Helm Install') {
+    stage('Helm Deploy') {
       steps {
-        dir('charts/flask-chart') {
+        dir("${HELM_CHART_DIR}") {
           sh '''
-            echo "🚀 Deploy con Helm..."
-            export KUBECONFIG=/home/jenkins/.kube/config
-            helm upgrade --install flask-release . \
-              --namespace default \
-              --create-namespace
+            echo "🚀 Deploy su Kubernetes via Helm..."
+            export KUBECONFIG=${KUBECONFIG}
+            helm upgrade --install ${HELM_RELEASE_NAME} . \
+              --namespace ${HELM_NAMESPACE} \
+              --create-namespace \
+              --set image.repository=${DOCKER_IMAGE} \
+              --set image.tag=${IMAGE_TAG}
           '''
         }
       }
@@ -60,12 +90,14 @@ pipeline {
   }
 
   post {
-    failure {
-      echo '❌ Deploy fallito'
+    always {
+      sh 'docker logout || true'
     }
     success {
-      echo '✅ Deploy riuscito'
+      echo "✅ Deploy completato con successo!"
+    }
+    failure {
+      echo "❌ Qualcosa è andato storto durante la pipeline."
     }
   }
 }
-
