@@ -5,7 +5,7 @@ pipeline {
     HELM_VERSION = "v3.13.3"
     HELM_INSTALL_DIR = "${WORKSPACE}/tools"
     PATH = "${HELM_INSTALL_DIR}:${PATH}"
-    KUBECONFIG = '/home/jenkins/.kube/config'
+    KUBECONFIG = "/home/jenkins/.kube/config"  // kubeconfig corretto
   }
 
   stages {
@@ -31,12 +31,26 @@ pipeline {
       }
     }
 
+    stage('Verifica Connessione Cluster') {
+      steps {
+        sh '''
+          echo "🔍 Verifica connessione al cluster Kubernetes..."
+          export KUBECONFIG=/home/jenkins/.kube/config
+          kubectl cluster-info
+          kubectl get nodes
+        '''
+      }
+    }
+
     stage('Helm Install') {
       steps {
         dir('charts/flask-chart') {
           sh '''
             echo "🚀 Deploy con Helm..."
-            helm upgrade --install flask-release . --namespace default --create-namespace
+            export KUBECONFIG=/home/jenkins/.kube/config
+            helm upgrade --install flask-release . \
+              --namespace default \
+              --create-namespace
           '''
         }
       }
