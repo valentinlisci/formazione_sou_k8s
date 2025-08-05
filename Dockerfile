@@ -15,17 +15,17 @@ RUN apt-get update && \
     chmod +x /usr/local/bin/helm && \
     rm -rf linux-amd64 helm-${HELM_VERSION}-linux-amd64.tar.gz
 
-# Fai il cleanup in un secondo blocco (opzionale ma consigliato)
-RUN apt-get remove -y curl tar && \
+# (Pulizia opzionale – rimuove curl, NON tar)
+RUN apt-get remove -y curl && \
     apt-get autoremove -y && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Copia i file dell'app
+# Copia e installa dipendenze Python
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Comando di avvio
+# Avvio
 CMD ["python", "app.py"]
