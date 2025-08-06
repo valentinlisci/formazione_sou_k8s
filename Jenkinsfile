@@ -41,15 +41,27 @@ pipeline {
 
         stage('Build immagine Docker') {
             steps {
-                sh "docker build -t valentinlisci/flask-app-example-build:${dockerTag} ."
-                sh "docker tag valentinlisci/flask-app-example-build:${dockerTag} valentinlisci/flask-app-example-build:latest"
+                script {
+                    sh "docker build -t valentinlisci/flask-app-example-build:${dockerTag} ."
+                    
+                    // Aggiungo il tag 'latest' solo se il dockerTag è 'latest'
+                    if (dockerTag == "latest") {
+                        sh "docker tag valentinlisci/flask-app-example-build:latest valentinlisci/flask-app-example-build:latest"
+                    }
+                }
             }
         }
 
         stage('Push immagine Docker') {
             steps {
-                sh "docker push valentinlisci/flask-app-example-build:${dockerTag}"
-                sh "docker push valentinlisci/flask-app-example-build:latest"
+                script {
+                    sh "docker push valentinlisci/flask-app-example-build:${dockerTag}"
+
+                    // Pusha 'latest' solo se è il tag reale
+                    if (dockerTag == "latest") {
+                        sh "docker push valentinlisci/flask-app-example-build:latest"
+                    }
+                }
             }
         }
     }
