@@ -82,7 +82,7 @@ pipeline {
               --namespace ${HELM_NAMESPACE} \
               --create-namespace \
               --set image.repository=${DOCKER_IMAGE} \
-              --set image.tag=${IMAGE_TAG}
+              --set image.tag=${IMAGE_TAG} \
               --set service.type=NodePort
           '''
         }
