@@ -1,6 +1,7 @@
 pipeline {
-    lable 'agent1'
-}
+    agent {
+        label 'agent1'
+    }
 
     environment {
         GIT_COMMIT_HASH = ''
@@ -27,7 +28,7 @@ pipeline {
                         dockerTag = "${BRANCH_NAME}-${GIT_COMMIT_HASH}"
                     }
 
-                    echo "Docker Tag determinato: ${dockerTag}"
+                    echo "📦 Docker Tag determinato: ${dockerTag}"
                 }
             }
         }
@@ -35,7 +36,9 @@ pipeline {
         stage('Login a Docker Hub') {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                    sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin"
+                    sh '''
+                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                    '''
                 }
             }
         }
@@ -44,8 +47,7 @@ pipeline {
             steps {
                 script {
                     sh "docker build -t valentinlisci/flask-app-example-build:${dockerTag} ."
-                    
-                    // Aggiungo il tag 'latest' solo se il dockerTag è 'latest'
+
                     if (dockerTag == "latest") {
                         sh "docker tag valentinlisci/flask-app-example-build:latest valentinlisci/flask-app-example-build:latest"
                     }
@@ -58,7 +60,6 @@ pipeline {
                 script {
                     sh "docker push valentinlisci/flask-app-example-build:${dockerTag}"
 
-                    // Pusha 'latest' solo se è il tag reale
                     if (dockerTag == "latest") {
                         sh "docker push valentinlisci/flask-app-example-build:latest"
                     }
@@ -69,7 +70,9 @@ pipeline {
 
     post {
         always {
-            sh 'docker logout'
+            script {
+                sh 'docker logout || true'
+            }
         }
     }
 }
