@@ -12,7 +12,7 @@ pipeline {
     DOCKER_IMAGE = "valentinlisci/flask-app-example-build"
     HELM_CHART_DIR = "charts/flask-chart"
     HELM_RELEASE_NAME = "flask-release"
-    HELM_NAMESPACE = "default"
+    HELM_NAMESPACE = "formazione-sou"
   }
 
   stages {
