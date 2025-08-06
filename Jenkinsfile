@@ -1,74 +1,104 @@
 pipeline {
-    agent any
+  agent {
+    label 'agent1'
+  }
 
-    environment {
-        GIT_COMMIT_HASH = ''
-        BRANCH_NAME = ''
-        dockerTag = ''
+  parameters {
+    string(name: 'IMAGE_TAG', defaultValue: '', description: 'Tag immagine Docker (lascia vuoto per generarlo in base a Git)')
+  }
+
+  environment {
+    KUBECONFIG = "/home/jenkins/.kube/config"
+    DOCKER_IMAGE = "valentinlisci/flask-app-example-build"
+    HELM_CHART_DIR = "charts/flask-chart"
+    HELM_RELEASE_NAME = "flask-release"
+    HELM_NAMESPACE = "formazione-sou"
+  }
+
+  stages {
+
+    stage('Checkout') {
+      steps {
+        checkout scm
+        script {
+          def shortCommit = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
+          def branchName = sh(script: "git rev-parse --abbrev-ref HEAD", returnStdout: true).trim()
+          def tagFromGit = sh(script: "git describe --tags --exact-match || true", returnStdout: true).trim()
+
+          if (!params.IMAGE_TAG?.trim()) {
+            if (tagFromGit) {
+              env.IMAGE_TAG = tagFromGit
+            } else if (branchName == "main") {
+              env.IMAGE_TAG = "latest"
+            } else if (branchName == "develop") {
+              env.IMAGE_TAG = "develop-${shortCommit}"
+            } else {
+              env.IMAGE_TAG = "${branchName}-${shortCommit}"
+            }
+          } else {
+            env.IMAGE_TAG = params.IMAGE_TAG
+          }
+
+          echo "📛 Tag finale immagine Docker: ${env.IMAGE_TAG}"
+        }
+      }
     }
 
-    stages {
-        stage('Checkout') {
-            steps {
-                checkout scm
-                script {
-                    GIT_COMMIT_HASH = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
-                    BRANCH_NAME = sh(script: "git rev-parse --abbrev-ref HEAD", returnStdout: true).trim()
-                    def rawTag = sh(script: "git describe --tags --exact-match || true", returnStdout: true).trim()
-
-                    if (rawTag) {
-                        dockerTag = rawTag
-                    } else if (BRANCH_NAME == "main") {
-                        dockerTag = "latest"
-                    } else if (BRANCH_NAME == "develop") {
-                        dockerTag = "develop-${GIT_COMMIT_HASH}"
-                    } else {
-                        dockerTag = "${BRANCH_NAME}-${GIT_COMMIT_HASH}"
-                    }
-
-                    echo "Docker Tag determinato: ${dockerTag}"
-                }
-            }
+    stage('Login DockerHub') {
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+          sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin"
         }
-
-        stage('Login a Docker Hub') {
-            steps {
-                withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                    sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin"
-                }
-            }
-        }
-
-        stage('Build immagine Docker') {
-            steps {
-                script {
-                    sh "docker build -t valentinlisci/flask-app-example-build:${dockerTag} ."
-                    
-                    // Aggiungo il tag 'latest' solo se il dockerTag è 'latest'
-                    if (dockerTag == "latest") {
-                        sh "docker tag valentinlisci/flask-app-example-build:latest valentinlisci/flask-app-example-build:latest"
-                    }
-                }
-            }
-        }
-
-        stage('Push immagine Docker') {
-            steps {
-                script {
-                    sh "docker push valentinlisci/flask-app-example-build:${dockerTag}"
-
-                    // Pusha 'latest' solo se è il tag reale
-                    if (dockerTag == "latest") {
-                        sh "docker push valentinlisci/flask-app-example-build:latest"
-                    }
-                }
-            }
-        }
+      }
     }
 
-    post {
-        always {
-            sh 'docker logout'
-        }
+    stage('Build Docker') {
+      steps {
+        sh '''
+          echo "🔨 Costruisco immagine Docker..."
+          docker build -t ${DOCKER_IMAGE}:${IMAGE_TAG} .
+          docker tag ${DOCKER_IMAGE}:${IMAGE_TAG} ${DOCKER_IMAGE}:latest
+        '''
+      }
     }
+
+    stage('Push Docker') {
+      steps {
+        sh '''
+          echo "📤 Pusho immagine Docker..."
+          docker push ${DOCKER_IMAGE}:${IMAGE_TAG}
+          docker push ${DOCKER_IMAGE}:latest
+        '''
+      }
+    }
+
+    stage('Helm Deploy') {
+      steps {
+        dir("${HELM_CHART_DIR}") {
+          sh '''
+            echo "🚀 Deploy su Kubernetes via Helm..."
+            export KUBECONFIG=${KUBECONFIG}
+            helm upgrade --install ${HELM_RELEASE_NAME} . \
+              --namespace ${HELM_NAMESPACE} \
+              --create-namespace \
+              --set image.repository=${DOCKER_IMAGE} \
+              --set image.tag=${IMAGE_TAG} \
+              --set service.type=NodePort
+          '''
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      sh 'docker logout || true'
+    }
+    success {
+      echo "✅ Deploy completato con successo!"
+    }
+    failure {
+      echo "❌ Qualcosa è andato storto durante la pipeline."
+    }
+  }
 }
