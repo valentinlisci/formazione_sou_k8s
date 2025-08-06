@@ -1,5 +1,6 @@
 pipeline {
-    agent any
+    lable 'agent1'
+}
 
     environment {
         GIT_COMMIT_HASH = ''
