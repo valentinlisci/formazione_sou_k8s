@@ -6,7 +6,7 @@ try:
     apps_v1 = client.AppsV1Api()
 
     namespace = "formazione-sou"
-    deployment_name = "flask-app-flask-chart"
+    deployment_name = "flask-release-flask-chart"
 
     deployment = apps_v1.read_namespaced_deployment(name=deployment_name, namespace=namespace)
     containers = deployment.spec.template.spec.containers
