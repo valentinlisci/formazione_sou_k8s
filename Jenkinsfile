@@ -4,8 +4,12 @@ pipeline {
   }
 
   parameters {
-    string(name: 'IMAGE_TAG', defaultValue: '', description: 'Tag immagine Docker (lascia vuoto per generarlo 
-in base a Git)')
+    string(
+      name: 'IMAGE_TAG',
+      defaultValue: '',
+      description: "Tag dell'immagine Docker da usare. Lascia vuoto per usare un tag generato da git (es. 'git 
+describe' oppure 'branch-shortSHA')."
+    )
   }
 
   environment {
@@ -57,7 +61,6 @@ in base a Git)')
     stage('Build Docker') {
       steps {
         sh '''
-          echo "Costruisco immagine Docker..."
           docker build -t ${DOCKER_IMAGE}:${IMAGE_TAG} .
           docker tag ${DOCKER_IMAGE}:${IMAGE_TAG} ${DOCKER_IMAGE}:latest
         '''
@@ -67,7 +70,6 @@ in base a Git)')
     stage('Push Docker') {
       steps {
         sh '''
-          echo "Pusho immagine Docker..."
           docker push ${DOCKER_IMAGE}:${IMAGE_TAG}
           docker push ${DOCKER_IMAGE}:latest
         '''
@@ -78,7 +80,6 @@ in base a Git)')
       steps {
         dir("${HELM_CHART_DIR}") {
           sh '''
-            echo "Deploy su Kubernetes via Helm..."
             export KUBECONFIG=${KUBECONFIG}
             helm upgrade --install ${HELM_RELEASE_NAME} . \
               --namespace ${HELM_NAMESPACE} \
@@ -91,14 +92,30 @@ in base a Git)')
       }
     }
 
-    stage('Validazione Deployment') {
+    stage('Validazione Kubernetes') {
       steps {
         sh '''
-          echo "Eseguo validazione Deployment..."
-          kubectl delete pod validator -n ${HELM_NAMESPACE} --ignore-not-found
-          kubectl apply -f validator-pod.yaml
-          sleep 5
-          kubectl logs -n ${HELM_NAMESPACE} validator || true
+          echo "Eseguo validazione risorse nel deployment..."
+          kubectl wait --for=condition=available --timeout=60s deployment/${HELM_RELEASE_NAME}-flask-chart -n 
+${HELM_NAMESPACE}
+          kubectl run validator \
+            --rm -i --tty \
+            --restart=Never \
+            --namespace=${HELM_NAMESPACE} \
+            --image=python:3.9-slim \
+            --overrides='{
+              "apiVersion": "v1",
+              "kind": "Pod",
+              "spec": {
+                "serviceAccountName": "reader",
+                "containers": [{
+                  "name": "validator",
+                  "image": "python:3.9-slim",
+                  "command": ["python"],
+                  "args": ["-c", "import requests; print(\\\"TODO: validazione\\\")"]
+                }]
+              }
+            }'
         '''
       }
     }
@@ -112,7 +129,7 @@ in base a Git)')
       echo "Deploy completato con successo."
     }
     failure {
-      echo "Errore durante la pipeline."
+      echo "Errore durante l'esecuzione della pipeline."
     }
   }
 }
