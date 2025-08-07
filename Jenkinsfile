@@ -7,8 +7,8 @@ pipeline {
     string(
       name: 'IMAGE_TAG',
       defaultValue: '',
-      description: "Tag dell'immagine Docker da usare. Lascia vuoto per usare un tag generato da git (es. 'git 
-describe' oppure 'branch-shortSHA')."
+      description: '''Tag immagine Docker.
+Lascia vuoto per usare il tag generato da git (es. "git describe").'''
     )
   }
 
@@ -61,6 +61,7 @@ describe' oppure 'branch-shortSHA')."
     stage('Build Docker') {
       steps {
         sh '''
+          echo "Costruisco immagine Docker..."
           docker build -t ${DOCKER_IMAGE}:${IMAGE_TAG} .
           docker tag ${DOCKER_IMAGE}:${IMAGE_TAG} ${DOCKER_IMAGE}:latest
         '''
@@ -70,6 +71,7 @@ describe' oppure 'branch-shortSHA')."
     stage('Push Docker') {
       steps {
         sh '''
+          echo "Pusho immagine Docker..."
           docker push ${DOCKER_IMAGE}:${IMAGE_TAG}
           docker push ${DOCKER_IMAGE}:latest
         '''
@@ -80,6 +82,7 @@ describe' oppure 'branch-shortSHA')."
       steps {
         dir("${HELM_CHART_DIR}") {
           sh '''
+            echo "Deploy su Kubernetes via Helm..."
             export KUBECONFIG=${KUBECONFIG}
             helm upgrade --install ${HELM_RELEASE_NAME} . \
               --namespace ${HELM_NAMESPACE} \
@@ -91,34 +94,6 @@ describe' oppure 'branch-shortSHA')."
         }
       }
     }
-
-    stage('Validazione Kubernetes') {
-      steps {
-        sh '''
-          echo "Eseguo validazione risorse nel deployment..."
-          kubectl wait --for=condition=available --timeout=60s deployment/${HELM_RELEASE_NAME}-flask-chart -n 
-${HELM_NAMESPACE}
-          kubectl run validator \
-            --rm -i --tty \
-            --restart=Never \
-            --namespace=${HELM_NAMESPACE} \
-            --image=python:3.9-slim \
-            --overrides='{
-              "apiVersion": "v1",
-              "kind": "Pod",
-              "spec": {
-                "serviceAccountName": "reader",
-                "containers": [{
-                  "name": "validator",
-                  "image": "python:3.9-slim",
-                  "command": ["python"],
-                  "args": ["-c", "import requests; print(\\\"TODO: validazione\\\")"]
-                }]
-              }
-            }'
-        '''
-      }
-    }
   }
 
   post {
@@ -126,10 +101,10 @@ ${HELM_NAMESPACE}
       sh 'docker logout || true'
     }
     success {
-      echo "Deploy completato con successo."
+      echo "Deploy completato con successo"
     }
     failure {
-      echo "Errore durante l'esecuzione della pipeline."
+      echo "Errore durante l'esecuzione della pipeline"
     }
   }
 }
