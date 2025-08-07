@@ -4,14 +4,14 @@ name: jenkins-cluster
 nodes:
   - role: control-plane
     extraPortMappings:
-      - containerPort: 6443
-        hostPort: 35213
+      - containerPort: 30413
+        hostPort: 30413
         listenAddress: "192.168.56.1"
     kubeadmConfigPatches:
       - |
         kind: ClusterConfiguration
         apiServer:
           certSANs:
-            - "192.168.56.1"
+            - "192.168.56.10"
             - "localhost"
             - "127.0.0.1"
