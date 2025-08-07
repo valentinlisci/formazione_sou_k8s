@@ -6,10 +6,11 @@ metadata:
     app: {{ include "flask-chart.name" . }}
 spec:
   type: {{ .Values.service.type }}
+  selector:
+    app.kubernetes.io/name: {{ include "flask-chart.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
   ports:
     - port: {{ .Values.service.port }}
       targetPort: {{ .Values.service.targetPort }}
-  ports:
-    - port: 5000
-      targetPort: 5000
-      nodeport: 31388
+      nodePort: {{ .Values.service.nodePort | default 31388 }}
+

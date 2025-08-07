@@ -2,17 +2,20 @@ replicaCount: 1
 
 image:
   repository: valentinlisci/flask-app-example-build
-  tag: "latest"           # Questo verrà sovrascritto al momento dell’installazione
+  tag: "latest"           
   pullPolicy: IfNotPresent
 
 service:
   type: NodePort
   port: 5000
   targetPort: 8000
-  type: NodePort
+  nodePort: 31388   #
 
 resources: {}
 
 nodeSelector: {}
+
 tolerations: []
+
 affinity: []
+
